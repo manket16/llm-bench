@@ -9,6 +9,28 @@ import httpx
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 
 
+def gpu_share(model: str, timeout: float = 10.0) -> float | None:
+    """Return size_vram / size for *model* from /api/ps, or None if not found."""
+    with httpx.Client(timeout=timeout) as client:
+        resp = client.get(f"{OLLAMA_URL}/api/ps")
+        resp.raise_for_status()
+    for entry in resp.json().get("models", []):
+        if entry.get("name") == model or entry.get("model") == model:
+            size = entry.get("size", 0)
+            size_vram = entry.get("size_vram", 0)
+            return size_vram / size if size > 0 else None
+    return None
+
+
+def unload(model: str, timeout: float = 30.0) -> None:
+    """Ask Ollama to evict *model* from memory (keep_alive=0)."""
+    with httpx.Client(timeout=timeout) as client:
+        client.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={"model": model, "keep_alive": 0},
+        )
+
+
 def generate(
     model: str,
     prompt: str,
